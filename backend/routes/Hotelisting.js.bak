@@ -1,0 +1,121 @@
+const express = require('express');
+const router = express.Router();
+const Hotelist = require('../models/Hotelisting');
+const auth = require('../middleware/auth');
+
+
+// Get all hotel listings
+router.get('/', async (req, res) => {
+    try {
+        const{location, priceRange, amenities} = req.query;
+        const filter = {};
+        if (location) {
+            filter.location = { $regex: location, $options: 'i' };
+        }
+        if (minPrice || maxPrice) {
+            filter.price = {};
+            if (minPrice) {
+                filter.price.$gte = +minPrice;
+            }
+            if (maxPrice) {
+                filter.price.$lte = +maxPrice;
+            }
+        }
+        if (amenities) {
+            filter.amenities = { $all: amenities.split(',') };
+        }
+        const Hotelistings = await Hotelist.find(filter);
+        res.json(Hotelistings);
+    } catch (error) {
+        res.status(500).json({ message: 'Server error' });
+    }
+});
+
+
+//Get hotel listing by ID
+router.get('/:id', async (req, res) => {
+    try {
+        const Hotelisting = await Hotelist.findById(req.params.id);
+        if (!Hotelisting) {
+            return res.status(404).json({ message: 'Hotel listing not found' });
+        }
+        res.json(Hotelisting);
+    } catch (error) {
+        res.status(500).json({ message: 'Server error' });
+    }
+});
+
+
+//Post List by Host
+router.post('/', auth, async (req, res) => {
+    try {
+        if (!req.user.isHost) {
+            return res.status(403).json({ message: 'Only hosts can create listings' });
+        }
+        const newHotelisting = new Hotelist({
+            ...req.body,
+            host: req.user.userId
+        });
+        const savedHotelisting = await newHotelisting.save();
+        res.status(201).json(savedHotelisting);
+    } catch (error) {
+        res.status(500).json({ message: 'Server error' });
+    }
+});
+
+
+// Update hotel listing by ID
+router.put('/:id', auth, async (req, res) => {
+    try {
+        const Hotelisting = await Hotelist.findById(req.params.id);
+        if (!Hotelisting) {
+            return res.status(404).json({ message: 'Hotel listing not found' });
+        }
+        if (Hotelisting.host.toString() !== req.user.userId) {
+            return res.status(403).json({ message: 'Unauthorized' });
+        }
+        const updatedHotelisting = await Hotelist.findByIdAndUpdate(
+            req.params.id,
+            { $set: req.body },
+            { new: true }
+        );
+        res.json(updatedHotelisting);
+    } catch (error) {
+        res.status(500).json({ message: 'Server error' });
+    }
+});
+
+
+
+// Delete hotel listing by ID
+router.delete('/:id', auth, async (req, res) => {
+    try {
+        const Hotelisting = await Hotelist.findById(req.params.id);
+        if (!Hotelisting) {
+            return res.status(404).json({ message: 'Hotel listing not found' });
+        }
+        if (Hotelisting.host.toString() !== req.user.userId) {
+            return res.status(403).json({ message: 'Unauthorized' });
+        }
+        await Hotelist.findByIdAndDelete(req.params.id);
+        res.json({ message: 'Hotel listing deleted' });
+    } catch (error) {
+        res.status(500).json({ message: 'Server error' });
+    }
+});
+
+// Get hotel listings created by the authenticated host
+router.get("my-listings", auth, async (req, res) => {
+    try {
+        if (!req.user.isHost) {
+            return res.status(403).json({ message: 'Only hosts can view their listings' });
+        }
+        const myListings = await Hotelist.find({ host: req.user.userId });
+        res.json(myListings);
+    } catch (error) {
+        res.status(500).json({ message: 'Server error' });
+    }
+});
+
+
+module.exports = router;
